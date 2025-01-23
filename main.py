@@ -1,14 +1,16 @@
 import cv2
 import mediapipe as mp
 import pyautogui
-from utils import set_volume, adjust_volume, play_pause_media, next_track, prev_track, is_pinch, smooth_cursor
+from utils import set_volume, adjust_volume, play_pause_media, next_track, prev_track, is_pinch, smooth_cursor, is_dragging
 
-# Function to track hand landmarks and control mouse and media
-def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor):
+# Function to track hand landmarks and control mouse and media with UI feedback
+def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position):
     h, w, _ = frame.shape
     # Convert the frame to RGB (required by MediaPipe)
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(frame_rgb)
+
+    action_text = ""  # Variable to hold action text for UI feedback
 
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
@@ -32,7 +34,12 @@ def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_f
 
             if is_pinch(index_x, index_y, thumb_x, thumb_y):
                 pyautogui.click()
-                cv2.putText(frame, "Left Click", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                action_text = "Left Click"
+
+                # Right click gesture: thumb and index finger spread
+                if abs(index_x - thumb_x) > 50:
+                    pyautogui.rightClick()
+                    action_text = "Right Click"
 
             # Volume Control based on finger movement
             if prev_finger_y is not None:
@@ -40,22 +47,38 @@ def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_f
                 if abs(diff_y) > 20:
                     if diff_y > 0:
                         adjust_volume(increase=True)
+                        action_text = "Volume Up"
                     elif diff_y < 0:
                         adjust_volume(increase=False)
+                        action_text = "Volume Down"
 
             prev_finger_y = screen_y
 
             # Media Player Controls
             if is_pinch(index_x, index_y, thumb_x, thumb_y):
                 play_pause_media()
+                action_text = "Play/Pause Media"
 
             if prev_x and (screen_x - prev_x) > 20:
                 next_track()
+                action_text = "Next Track"
 
             if prev_x and (screen_x - prev_x) < -20:
                 prev_track()
+                action_text = "Previous Track"
 
-    return prev_x, prev_y, prev_finger_y
+            # Drag and Drop functionality: Detecting pinch for dragging
+            if is_dragging(index_x, index_y, thumb_x, thumb_y):
+                if prev_drag_position is None:
+                    prev_drag_position = (screen_x, screen_y)
+                else:
+                    pyautogui.moveTo(screen_x, screen_y)
+                action_text = "Dragging..."
+
+    # Display the action text as UI feedback
+    cv2.putText(frame, action_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+    return prev_x, prev_y, prev_finger_y, prev_drag_position
 
 # Main function to run the virtual mouse gesture control
 def main():
@@ -70,6 +93,7 @@ def main():
 
     prev_x, prev_y = 0, 0
     prev_finger_y = None
+    prev_drag_position = None
     smooth_factor = 0.7
 
     while True:
@@ -79,9 +103,11 @@ def main():
 
         frame = cv2.flip(frame, 1)  # Flip frame horizontally for mirror effect
 
-        prev_x, prev_y, prev_finger_y = track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor)
+        prev_x, prev_y, prev_finger_y, prev_drag_position = track_hand_and_control(
+            frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position
+        )
 
-        # Display the webcam feed
+        # Display the webcam feed with action text
         cv2.imshow("Virtual Mouse", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):

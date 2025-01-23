@@ -1,62 +1,63 @@
-import os
 import pyautogui
+import screeninfo
+import math
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+import win32com.client
 
+# Function to set volume to a specific level
+def set_volume(level):
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(
+        IAudioEndpointVolume._iid_, 0, None)
+    volume = interface.QueryInterface(IAudioEndpointVolume)
+    volume.SetMasterVolumeLevelScalar(level / 100, None)
 
-# Volume Control Utilities
-def set_volume(volume_level):
-    """Set system volume to a specified level."""
-    try:
-        os.system(f"osascript -e 'set volume output volume {volume_level}'")
-    except Exception as e:
-        print(f"Error setting volume: {e}")
+# Function to adjust volume based on the gesture movement
+def adjust_volume(increase=True):
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(
+        IAudioEndpointVolume._iid_, 0, None)
+    volume = interface.QueryInterface(IAudioEndpointVolume)
+    current_volume = volume.GetMasterVolumeLevelScalar() * 100
+    
+    # Increase or decrease volume by 5
+    new_volume = current_volume + 5 if increase else current_volume - 5
+    new_volume = max(0, min(100, new_volume))  # Clamp between 0 and 100
+    set_volume(new_volume)
 
-
-def adjust_volume(increase=True, step=5):
-    """Adjust the system volume by a specified step."""
-    try:
-        current_volume = int(os.popen("osascript -e 'output volume of (get volume settings)'").read())
-        new_volume = min(current_volume + step, 100) if increase else max(current_volume - step, 0)
-        set_volume(new_volume)
-        return new_volume
-    except Exception as e:
-        print(f"Error adjusting volume: {e}")
-        return current_volume
-
-
-# Media Control Utilities
+# Function to play or pause media
 def play_pause_media():
-    """Play or pause the media player."""
-    try:
-        os.system("osascript -e 'tell application \"System Events\" to keystroke \" \" using command down'")
-    except Exception as e:
-        print(f"Error in media play/pause: {e}")
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shell.SendKeys("^{SPACE}")
 
-
+# Function to go to the next media track
 def next_track():
-    """Skip to the next media track."""
-    try:
-        os.system("osascript -e 'tell application \"System Events\" to keystroke \"n\" using command down'")
-    except Exception as e:
-        print(f"Error going to next track: {e}")
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shell.SendKeys("^{RIGHT}")
 
-
+# Function to go to the previous media track
 def prev_track():
-    """Go to the previous media track."""
-    try:
-        os.system("osascript -e 'tell application \"System Events\" to keystroke \"p\" using command down'")
-    except Exception as e:
-        print(f"Error going to previous track: {e}")
+    shell = win32com.client.Dispatch("WScript.Shell")
+    shell.SendKeys("^{LEFT}")
 
+# Function to check if a pinch gesture is detected (thumb and index finger close)
+def is_pinch(index_x, index_y, thumb_x, thumb_y):
+    distance = math.sqrt((index_x - thumb_x) ** 2 + (index_y - thumb_y) ** 2)
+    return distance < 30  # Adjust distance threshold as necessary
 
-# Gesture Detection Utilities
-def is_pinch(index_x, index_y, thumb_x, thumb_y, threshold=30):
-    """Detect if a pinch gesture is performed based on the distance between thumb and index finger."""
-    distance = ((index_x - thumb_x) ** 2 + (index_y - thumb_y) ** 2) ** 0.5
-    return distance < threshold
+# Function to check if the user is dragging (thumb and index finger spread)
+def is_dragging(index_x, index_y, thumb_x, thumb_y):
+    distance = math.sqrt((index_x - thumb_x) ** 2 + (index_y - thumb_y) ** 2)
+    return distance > 60  # Dragging gesture when the distance is greater than a threshold
 
+# Function to smooth cursor movement
+def smooth_cursor(prev_x, prev_y, curr_x, curr_y, smooth_factor=0.7):
+    # Smooth the cursor movement by gradually adjusting to the target position
+    smooth_x = prev_x + (curr_x - prev_x) * smooth_factor
+    smooth_y = prev_y + (curr_y - prev_y) * smooth_factor
+    return int(smooth_x), int(smooth_y)
 
-def smooth_cursor(prev_x, prev_y, screen_x, screen_y, smooth_factor=0.7):
-    """Smooth the cursor movement using a weighted average of previous and current positions."""
-    mouse_x = int(smooth_factor * prev_x + (1 - smooth_factor) * screen_x)
-    mouse_y = int(smooth_factor * prev_y + (1 - smooth_factor) * screen_y)
-    return mouse_x, mouse_y
+# Function to get screen resolution (useful if needed for customization)
+def get_screen_resolution():
+    screen = screeninfo.get_monitors()[0]
+    return screen.width, screen.height
