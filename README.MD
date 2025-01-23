@@ -50,4 +50,4 @@ This project enables you to control the mouse, adjust system volume, and manage 
 - Follow the on-screen instructions to perform gestures for controlling the mouse, volume, and media playback.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE] file for more details.
+This project is licensed under the MIT License. See the LICENSE file for more details.
