@@ -1,24 +1,46 @@
 import pyautogui
 import screeninfo
 import math
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-import win32com.client
+import subprocess
+import os
+import numpy as np
+from platform import system
+
+# Determine the operating system
+SYSTEM = system()
+
+# Import OS-specific modules
+if SYSTEM == "Windows":
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    # Initialize audio controller for Windows
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
 
 # Function to set volume to a specific level
 def set_volume(level):
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(
-        IAudioEndpointVolume._iid_, 0, None)
-    volume = interface.QueryInterface(IAudioEndpointVolume)
-    volume.SetMasterVolumeLevelScalar(level / 100, None)
+    level = max(0, min(100, level))  # Clamp between 0 and 100
+    if SYSTEM == "Windows":
+        volume.SetMasterVolumeLevelScalar(level / 100, None)
+    else:  # macOS
+        os.system(f"osascript -e 'set volume output volume {level}'")
+
+# Function to get current volume level
+def get_volume():
+    try:
+        if SYSTEM == "Windows":
+            return int(volume.GetMasterVolumeLevelScalar() * 100)
+        else:  # macOS
+            cmd = "osascript -e 'output volume of (get volume settings)'"
+            return int(subprocess.check_output(cmd, shell=True))
+    except:
+        return 50  # Default volume if command fails
 
 # Function to adjust volume based on the gesture movement
 def adjust_volume(increase=True):
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(
-        IAudioEndpointVolume._iid_, 0, None)
-    volume = interface.QueryInterface(IAudioEndpointVolume)
-    current_volume = volume.GetMasterVolumeLevelScalar() * 100
+    current_volume = get_volume()
     
     # Increase or decrease volume by 5
     new_volume = current_volume + 5 if increase else current_volume - 5
@@ -27,18 +49,24 @@ def adjust_volume(increase=True):
 
 # Function to play or pause media
 def play_pause_media():
-    shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys("^{SPACE}")
+    if SYSTEM == "Windows":
+        pyautogui.press('playpause')
+    else:  # macOS
+        os.system("""osascript -e 'tell application "System Events" to key code 49'""")  # space key
 
 # Function to go to the next media track
 def next_track():
-    shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys("^{RIGHT}")
+    if SYSTEM == "Windows":
+        pyautogui.press('nexttrack')
+    else:  # macOS
+        os.system("""osascript -e 'tell application "System Events" to key code 124 using {command down}'""")  # right arrow
 
 # Function to go to the previous media track
 def prev_track():
-    shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys("^{LEFT}")
+    if SYSTEM == "Windows":
+        pyautogui.press('prevtrack')
+    else:  # macOS
+        os.system("""osascript -e 'tell application "System Events" to key code 123 using {command down}'""")  # left arrow
 
 # Function to check if a pinch gesture is detected (thumb and index finger close)
 def is_pinch(index_x, index_y, thumb_x, thumb_y):

@@ -4,11 +4,15 @@ import pyautogui
 from utils import set_volume, adjust_volume, play_pause_media, next_track, prev_track, is_pinch, smooth_cursor, is_dragging
 
 # Function to track hand landmarks and control mouse and media with UI feedback
-def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position):
+def track_hand_and_control(frame, hands, mp_draw, mp_hands, screen_w, screen_h, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position, prev_tick):
     h, w, _ = frame.shape
     # Convert the frame to RGB (required by MediaPipe)
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(frame_rgb)
+    
+    # Calculate FPS
+    current_tick = cv2.getTickCount()
+    fps = cv2.getTickFrequency() / (current_tick - prev_tick)
 
     action_text = ""  # Variable to hold action text for UI feedback
 
@@ -78,7 +82,7 @@ def track_hand_and_control(frame, hands, prev_x, prev_y, prev_finger_y, smooth_f
     # Display the action text as UI feedback
     cv2.putText(frame, action_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
-    return prev_x, prev_y, prev_finger_y, prev_drag_position
+    return prev_x, prev_y, prev_finger_y, prev_drag_position, fps
 
 # Main function to run the virtual mouse gesture control
 def main():
@@ -91,10 +95,20 @@ def main():
     cap = cv2.VideoCapture(0)
     screen_w, screen_h = pyautogui.size()
 
+    # Set camera resolution for better performance
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    # Initialize variables
     prev_x, prev_y = 0, 0
     prev_finger_y = None
     prev_drag_position = None
     smooth_factor = 0.7
+    prev_tick = cv2.getTickCount()
+    
+    # Safety feature to prevent mouse from moving too fast
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.1  # Add a small delay between actions
 
     while True:
         ret, frame = cap.read()
@@ -103,14 +117,38 @@ def main():
 
         frame = cv2.flip(frame, 1)  # Flip frame horizontally for mirror effect
 
-        prev_x, prev_y, prev_finger_y, prev_drag_position = track_hand_and_control(
-            frame, hands, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position
+        # Call track_hand_and_control with current frame
+        prev_x, prev_y, prev_finger_y, prev_drag_position, current_fps = track_hand_and_control(
+            frame, hands, mp_draw, mp_hands, screen_w, screen_h, prev_x, prev_y, prev_finger_y, smooth_factor, prev_drag_position, prev_tick
         )
 
-        # Display the webcam feed with action text
-        cv2.imshow("Virtual Mouse", frame)
+        # Update prev_tick for next frame
+        prev_tick = cv2.getTickCount()
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        # Display FPS
+        cv2.putText(frame, f"FPS: {current_fps}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Display controls guide
+        controls = [
+            "Controls Guide:",
+            "- Move Index Finger: Move Mouse",
+            "- Pinch: Left Click",
+            "- Pinch + Spread: Right Click",
+            "- Move Up/Down: Volume Control",
+            "- Swipe Left/Right: Prev/Next Track",
+            "- Press 'q' to Quit"
+        ]
+        
+        for i, text in enumerate(controls):
+            cv2.putText(frame, text, (10, 60 + i * 25), cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.6, (255, 255, 0), 1)
+
+        # Display the webcam feed with action text and controls
+        cv2.imshow("Virtual Mouse Gesture Control", frame)
+
+        # Check for quit key
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
             break
 
     # Release resources
